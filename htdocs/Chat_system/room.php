@@ -73,6 +73,7 @@ $is_admin = isset($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1;
     <div class="chat-card">
       <div class="chat-header">💭 Chat Público</div>
       <div id="publicMessages" class="chat-messages"><div class="loading">Carregando mensagens...</div></div>
+      <div id="typingStatus" class="typing-status" style="display:none;"></div>
       <form id="publicForm" class="chat-form">
         <input id="publicInput" type="text" placeholder="Digite sua mensagem..." maxlength="500" required />
         <button type="submit" class="btn btn-primary">Enviar</button>
@@ -123,12 +124,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const publicForm = document.getElementById('publicForm');
     const publicInput = document.getElementById('publicInput');
     const publicMessages = document.getElementById('publicMessages');
+    const typingStatus = document.getElementById('typingStatus');
     const adminToggle = document.getElementById('adminToggle');
     const adminCard = document.getElementById('adminCard');
     const adminForm = document.getElementById('adminForm');
     const adminInput = document.getElementById('adminInput');
     const adminMessages = document.getElementById('adminMessages');
     const userList = document.getElementById('userList');
+
+    // Variáveis para gerenciar status de digitação
+    let typingTimer = null;
+    let isTyping = false;
 
     // Função para formatar links/GIFs
     function formatMessage(text) {
@@ -198,9 +204,60 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Funções para gerenciar status de digitação
+    function setTypingStatus(status) {
+        fetch('Api/typing_status.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'typing=' + (status ? 1 : 0)
+        }).catch(err => {
+            console.error('Erro ao atualizar status de digitação:', err);
+        });
+    }
+
+    function fetchTypingStatus() {
+        fetch('Api/typing_status.php')
+        .then(res => res.json())
+        .then(users => {
+            if (users.length > 0) {
+                const userText = users.length === 1 
+                    ? users[0] + ' está digitando...' 
+                    : users.slice(0, -1).join(', ') + ' e ' + users[users.length - 1] + ' estão digitando...';
+                typingStatus.innerHTML = '💬 ' + userText;
+                typingStatus.style.display = 'block';
+            } else {
+                typingStatus.style.display = 'none';
+            }
+        })
+        .catch(err => {
+            console.error('Erro ao buscar status de digitação:', err);
+        });
+    }
+
+    // Eventos de digitação no input público
+    publicInput.addEventListener('input', function() {
+        if (!isTyping) {
+            isTyping = true;
+            setTypingStatus(true);
+        }
+        
+        // Limpar timer anterior
+        clearTimeout(typingTimer);
+        
+        // Definir novo timer para parar digitação após 2s
+        typingTimer = setTimeout(() => {
+            isTyping = false;
+            setTypingStatus(false);
+        }, 2000);
+    });
+
     // Eventos de envio
     publicForm.addEventListener('submit', function(e) {
         e.preventDefault();
+        // Parar indicação de digitação ao enviar mensagem
+        clearTimeout(typingTimer);
+        isTyping = false;
+        setTypingStatus(false);
         sendMessage(publicInput, 'public');
     });
     if (adminForm) {
@@ -361,8 +418,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Atualização automática
     setInterval(fetchMessages, 1000);
     setInterval(fetchUsers, 500);
+    setInterval(fetchTypingStatus, 1000);
     fetchMessages();
     fetchUsers();
+    fetchTypingStatus();
 });
 </script>
 </body>
